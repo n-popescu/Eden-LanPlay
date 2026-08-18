@@ -1,15 +1,17 @@
 // SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 #ifdef _WIN32
