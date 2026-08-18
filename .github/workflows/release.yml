@@ -188,6 +188,32 @@ jobs:
       - name: Install the build tools
         run: choco install ninja nasm --no-progress -y
 
+      - name: Install glslang
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Linux takes this from apt and macOS from Homebrew, but the Windows image ships no shader
+          # compiler at all, and src/video_core/host_shaders needs one to configure. Taken from the
+          # Khronos release rather than a package manager so the version is pinned and verified.
+          #
+          # The archive only carries the modern `glslang` name, not the `glslangValidator` alias the
+          # Linux distributions still provide; find_program accepts either.
+          VERSION=16.5.0
+          ARCHIVE="glslang-$VERSION-windows-x86_64-release.zip"
+          SHA256=06b71298b750268c127f2ee7ae0ef7525e2068120c6c8a3a08b2f58ca6f325ce
+
+          curl -fsSL -o "$ARCHIVE" \
+            "https://github.com/KhronosGroup/glslang/releases/download/$VERSION/$ARCHIVE"
+
+          echo "$SHA256  $ARCHIVE" | sha256sum -c -
+
+          # 7z rather than unzip, which Git for Windows does not ship.
+          7z x -y -oglslang "$ARCHIVE" > /dev/null
+          rm "$ARCHIVE"
+
+          "$(pwd)/glslang/bin/glslang.exe" --version
+          echo "$(pwd -W)/glslang/bin" >> "$GITHUB_PATH"
+
       - name: 'Cache: CPM sources'
         uses: actions/cache@v4
         with:
