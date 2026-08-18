@@ -4,7 +4,7 @@ Eden can join a [switch-lan-play](https://github.com/spacemeowx2/switch-lan-play
 No second PC, no external `switch-lan-play` process, no libpcap, no virtual adapter, no host routing
 changes and no manual 10.13.x.x configuration on the host are needed.
 
-Enable **LAN Play** under *Emulation → Configure → Network*, enter the relay (`host:port`, for
+Enable **LAN Play** from the **LAN Play** menu in the menu bar, enter the relay (`host:port`, for
 example `switch.example.com:11451`), and launch a game that supports local wireless multiplayer.
 Every player on the same relay — Eden, Ryujinx, or a real console running ldn_mitm — can see each
 other.
@@ -214,7 +214,8 @@ socket:
 
 ## 11. Configuration
 
-*Emulation → Configure → Network → LAN Play*:
+*LAN Play → Configure LAN Play*, which is the same panel as *Emulation → Configure → Network → LAN
+Play*:
 
 * **Join a switch-lan-play relay** — the master switch.
 * **Relay Server** — `host:port`, for example `switch.example.com:11451`. The port defaults to 11451

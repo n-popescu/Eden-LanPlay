@@ -47,6 +47,7 @@
 
 #include "configuration/configure_dialog.h"
 #include "configuration/configure_input.h"
+#include "configuration/configure_lan_play_dialog.h"
 #include "configuration/configure_per_game.h"
 #include "configuration/configure_tas.h"
 
@@ -1608,6 +1609,9 @@ void MainWindow::ConnectMenuEvents() {
     connect_menu(ui->action_TAS_Record, &MainWindow::OnTasRecord);
     connect_menu(ui->action_TAS_Reset, &MainWindow::OnTasReset);
     connect_menu(ui->action_Configure_Tas, &MainWindow::OnConfigureTas);
+
+    // LAN Play
+    connect_menu(ui->action_Configure_LAN_Play, &MainWindow::OnConfigureLanPlay);
 
     // Help
     connect_menu(ui->action_Root_Data_Folder, &MainWindow::OnOpenRootDataFolder);
@@ -3474,6 +3478,18 @@ void MainWindow::OnConfigure() {
     UpdateStatusButtons();
     controller_dialog->refreshConfiguration();
     QtCommon::system->ApplySettings();
+}
+
+void MainWindow::OnConfigureLanPlay() {
+    ConfigureLanPlayDialog dialog(this);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    // Applying joins or leaves the relay right away, so this works while a game is running.
+    dialog.ApplyConfiguration();
+    OnSaveConfig();
 }
 
 void MainWindow::OnConfigureTas() {

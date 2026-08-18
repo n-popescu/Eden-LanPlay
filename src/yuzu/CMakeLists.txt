@@ -101,6 +101,12 @@ add_executable(yuzu
     configuration/configure_input_profile_dialog.cpp
     configuration/configure_input_profile_dialog.h
     configuration/configure_input_profile_dialog.ui
+    configuration/configure_lan_play.cpp
+    configuration/configure_lan_play.h
+    configuration/configure_lan_play.ui
+    configuration/configure_lan_play_dialog.cpp
+    configuration/configure_lan_play_dialog.h
+    configuration/configure_lan_play_dialog.ui
     configuration/configure_mouse_panning.cpp
     configuration/configure_mouse_panning.h
     configuration/configure_mouse_panning.ui
