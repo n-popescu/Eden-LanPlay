@@ -7,6 +7,7 @@
 #include <QtConcurrent/QtConcurrent>
 #include "common/settings.h"
 #include "core/core.h"
+#include "core/internal_network/lan_play/lan_play_connection_test.h"
 #include "core/internal_network/lan_play/lan_play_stack.h"
 #include "core/internal_network/network_interface.h"
 #include "ui_configure_network.h"
@@ -19,11 +20,25 @@ ConfigureNetwork::ConfigureNetwork(const Core::System& system_, QWidget* parent)
         ui->network_interface->addItem(QString::fromStdString(iface.name));
 
     connect(ui->lan_play_enabled, &QCheckBox::toggled, this, &ConfigureNetwork::UpdateLanPlayEnabled);
+    connect(ui->lan_play_test, &QPushButton::clicked, this,
+            &ConfigureNetwork::TestLanPlayConnection);
+
+    connect(&lan_play_test_watcher, &QFutureWatcher<Network::LanPlay::ConnectionTestResult>::finished,
+            this, [this]() {
+                const auto result = lan_play_test_watcher.result();
+
+                ui->lan_play_test_result->setText(QString::fromStdString(result.message));
+                ui->lan_play_test->setEnabled(true);
+            });
 
     this->SetConfiguration();
 }
 
-ConfigureNetwork::~ConfigureNetwork() = default;
+ConfigureNetwork::~ConfigureNetwork() {
+    // The worker holds no reference to this, but the finished handler does, so the dialog must not
+    // go away while a test is still running.
+    lan_play_test_watcher.waitForFinished();
+}
 
 void ConfigureNetwork::ApplyConfiguration() {
     Settings::values.network_interface = ui->network_interface->currentText().toStdString();
@@ -77,4 +92,24 @@ void ConfigureNetwork::UpdateLanPlayEnabled(bool enabled) {
     ui->lan_play_virtual_ip->setEnabled(enabled);
     ui->lan_play_virtual_ip_label->setEnabled(enabled);
     ui->lan_play_ldn_mitm->setEnabled(enabled);
+
+    // A test already under way owns the button; letting this re-enable it would allow a second one.
+    ui->lan_play_test->setEnabled(enabled && !lan_play_test_watcher.isRunning());
+}
+
+void ConfigureNetwork::TestLanPlayConnection() {
+    if (lan_play_test_watcher.isRunning()) {
+        return;
+    }
+
+    // The fields are read here rather than in the worker, because a widget may only be touched from
+    // the UI thread. The test uses its own relay connection and does not disturb a running session.
+    const std::string server = ui->lan_play_server->text().trimmed().toStdString();
+    const std::string virtual_ip = ui->lan_play_virtual_ip->text().trimmed().toStdString();
+
+    ui->lan_play_test->setEnabled(false);
+    ui->lan_play_test_result->setText(tr("Joining the relay and listening for a few seconds..."));
+
+    lan_play_test_watcher.setFuture(QtConcurrent::run(
+        [server, virtual_ip] { return Network::LanPlay::RunConnectionTest(server, virtual_ip); }));
 }

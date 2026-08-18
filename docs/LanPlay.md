@@ -89,6 +89,7 @@ The transport and virtual stack, in `src/core/internal_network/lan_play/`:
 | `virtual_address_allocator.{h,cpp}` | picks and probes the 10.13.x.x address |
 | `lan_play_stack.{h,cpp}` | the client plus the interface for one session, and the settings entry point |
 | `lan_play_socket.{h,cpp}` | `Network::SocketBase` for the emulated console's sockets, with host fallback |
+| `lan_play_connection_test.{h,cpp}` | joins a relay without a game and reports what answered (§12) |
 | `lan_play_diagnostics.{h,cpp}` | counters, per packet tracing, periodic summary, relay silence warning |
 
 The LDN interop, in `src/core/hle/service/ldn/lan_play/`:
@@ -220,6 +221,7 @@ socket:
   when omitted. If the relay requires a login, use `user:password@host:port`.
 * **Virtual IP** — leave empty for an automatic address, or force one inside `10.13.0.0/16`.
 * **Use ldn_mitm for games without LAN Play support** — on by default. See below.
+* **Test** — joins the relay without starting a game and reports what answered. See §13.
 
 Stored in the Network category as `lan_play_enabled`, `lan_play_server`, `lan_play_virtual_ip` and
 `lan_play_ldn_mitm`.
@@ -249,7 +251,27 @@ The choice is read when the game initialises LDN, so like the backend choice its
 migrate under a running session: toggling it mid-game takes effect the next time the game enters its
 local multiplayer menu.
 
-## 12. Debugging a session
+## 12. Testing a relay without a game
+
+The **Test** button next to the relay server joins the relay exactly the way the emulator does, picks
+a virtual address, broadcasts the same ldn_mitm scan request a console sends when it looks for a local
+session, listens for four seconds and reports what came back:
+
+```
+Joined the relay 203.0.113.9:11451 as 10.13.42.7. Saw 2 other participant(s): 10.13.4.7, 10.13.9.1.
+1 of them answered the local session scan.
+```
+
+It exists to separate "my relay setting is wrong" from "this game is not doing what I expect", which
+are otherwise very hard to tell apart. It runs on a worker thread with its own relay connection, so it
+neither blocks the UI nor disturbs a running session, and seeing no traffic at all is reported as
+normal rather than as a failure — an empty relay looks exactly the same as an unreachable one from a
+single client's point of view, apart from whether joining succeeded.
+
+`RunConnectionTest` in `lan_play_connection_test.cpp` is the whole of it, and it is the counterpart of
+Ryubing's `LanPlayConnectionTest`.
+
+## 13. Debugging a session
 
 **Normal log (info).** Joining, the chosen virtual address, LDN sessions being hosted or joined, scan
 results, messages sent by the relay, and a traffic summary every 30 seconds plus a final one when the
@@ -285,7 +307,7 @@ dumped as hex, which is what to attach when the framing itself is suspect.
 Incoming packets are validated the way a real stack does: the IPv4 header checksum and the UDP (when
 present) and TCP checksums are verified, and failures are counted rather than silently ignored.
 
-## 13. Known limitations
+## 14. Known limitations
 
 * **Not yet validated against real hardware or against Ryujinx on a live relay.** The
   implementation is byte compatible by construction (see section 7) but the interop has not been
@@ -310,5 +332,9 @@ present) and TCP checksums are verified, and failures are counted rather than si
   types are logged and ignored.
 * **The Android front end has no LAN Play UI yet.** The settings are read from the configuration
   file, so they work if written by hand, but nothing exposes them.
-* **No automated tests.** Ryujinx's implementation has an in-process relay and a test suite; the
-  equivalent does not exist here yet.
+* **The test suite is narrower than Ryujinx's.** `src/tests/core/internal_network/lan_play.cpp` ports
+  that project's in-process relay and covers broadcast and unicast routing, IPv4 fragmentation and
+  reassembly, an ldn_mitm scan reaching a host over the relay, and the connection test. Ryujinx also
+  covers the TCP handshake, duplicate address detection, teardown and reconnect, a full LDN session,
+  and the host socket fallback; those are not ported yet. Build with `-DYUZU_TESTS=ON` and run
+  `./bin/tests "[lan_play]"`.

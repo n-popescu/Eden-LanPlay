@@ -247,6 +247,12 @@ std::size_t Client::AddIpv4Handler(Ipv4Handler handler) {
     return token;
 }
 
+void Client::SetInfoHandler(InfoHandler handler) {
+    std::scoped_lock lock{handler_mutex};
+
+    info_handler = std::move(handler);
+}
+
 void Client::RemoveIpv4Handler(std::size_t token) {
     std::scoped_lock lock{handler_mutex};
 
@@ -426,10 +432,24 @@ void Client::HandleDatagram(std::span<const u8> datagram) {
         HandleAuthMe(payload);
         break;
 
-    case Relay::PacketType::Info:
-        LOG_INFO(Network_LanPlay, "relay message: {}",
-                 std::string_view{reinterpret_cast<const char*>(payload.data()), payload.size()});
+    case Relay::PacketType::Info: {
+        const std::string_view message{reinterpret_cast<const char*>(payload.data()),
+                                       payload.size()};
+
+        LOG_INFO(Network_LanPlay, "relay message: {}", message);
+
+        InfoHandler handler;
+        {
+            std::scoped_lock lock{handler_mutex};
+            handler = info_handler;
+        }
+
+        if (handler) {
+            handler(message);
+        }
+
         break;
+    }
 
     default:
         LOG_DEBUG(Network_LanPlay, "ignoring unknown relay packet type 0x{:02x}",

@@ -1137,6 +1137,8 @@ add_library(core STATIC
     internal_network/lan_play/lan_play_client.h
     internal_network/lan_play/lan_play_config.cpp
     internal_network/lan_play/lan_play_config.h
+    internal_network/lan_play/lan_play_connection_test.cpp
+    internal_network/lan_play/lan_play_connection_test.h
     internal_network/lan_play/lan_play_diagnostics.cpp
     internal_network/lan_play/lan_play_diagnostics.h
     internal_network/lan_play/lan_play_network_interface.cpp

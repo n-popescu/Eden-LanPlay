@@ -78,6 +78,16 @@
           </property>
          </widget>
         </item>
+        <item row="1" column="2">
+         <widget class="QPushButton" name="lan_play_test">
+          <property name="text">
+           <string>Test</string>
+          </property>
+          <property name="toolTip">
+           <string>Joins the relay without starting a game, sends the scan a console sends when it looks for a local session, and reports what answered. Use it to tell a wrong relay setting apart from a game specific problem.</string>
+          </property>
+         </widget>
+        </item>
         <item row="2" column="0">
          <widget class="QLabel" name="lan_play_virtual_ip_label">
           <property name="text">
@@ -102,6 +112,19 @@
           </property>
           <property name="toolTip">
            <string>Carries local wireless (LDN) over the relay using the ldn_mitm protocol, which is what makes games that have no LAN mode of their own work over LAN Play. It is byte compatible with a real Switch running ldn_mitm, so consoles and other emulators on the same relay can join. Turn it off to leave the relay to the plain IP traffic of games that do have a LAN mode. Takes effect the next time a game enters its local multiplayer menu.</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0" colspan="3">
+         <widget class="QLabel" name="lan_play_test_result">
+          <property name="text">
+           <string/>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+          <property name="textInteractionFlags">
+           <set>Qt::TextInteractionFlag::TextSelectableByMouse</set>
           </property>
          </widget>
         </item>

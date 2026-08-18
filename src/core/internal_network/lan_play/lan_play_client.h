@@ -10,6 +10,7 @@
 #include <mutex>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -32,6 +33,9 @@ public:
     /// Callback invoked for every complete IPv4 packet received from the relay.
     using Ipv4Handler = std::function<void(std::span<const u8>)>;
 
+    /// Callback invoked for every text message the relay sends.
+    using InfoHandler = std::function<void(std::string_view)>;
+
     explicit Client(Configuration configuration_);
     ~Client();
 
@@ -52,6 +56,12 @@ public:
      */
     std::size_t AddIpv4Handler(Ipv4Handler handler);
     void RemoveIpv4Handler(std::size_t token);
+
+    /**
+     * Registers a handler for the relay's text messages, which are otherwise only logged. Runs on the
+     * client's receive thread, so it must not block for long.
+     */
+    void SetInfoHandler(InfoHandler handler);
 
     /**
      * Sends a complete IPv4 packet (starting at its header) to the relay, fragmenting it at the
@@ -114,6 +124,7 @@ private:
 
     std::mutex handler_mutex;
     std::vector<std::pair<std::size_t, Ipv4Handler>> handlers;
+    InfoHandler info_handler;
     std::size_t next_handler_token{1};
 
     std::mutex fragment_mutex;
