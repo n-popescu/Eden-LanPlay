@@ -298,10 +298,16 @@ jobs:
       - name: Configure
         run: |
           set -euo pipefail
+          # YUZU_USE_BUNDLED_FFMPEG has to be asked for by name. It only defaults on for MSVC and
+          # Android, and CPMUTIL_FORCE_BUNDLED does not cover it, so without this CMakeLists.txt
+          # does a REQUIRED find_package(FFmpeg) against libraries no macOS runner has. The Linux
+          # job solves the same problem with apt; here the pinned macos-universal prebuilt is a
+          # better fit, because it is static and so needs nothing copied into the .app.
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
             -DYUZU_USE_BUNDLED_QT=OFF \
+            -DYUZU_USE_BUNDLED_FFMPEG=ON \
             ${{ env.COMMON_CMAKE_FLAGS }}
 
       - name: Build
