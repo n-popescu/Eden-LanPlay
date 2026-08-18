@@ -329,7 +329,9 @@ void Client::Send(Relay::PacketType type, std::span<const u8> payload) {
         std::memcpy(datagram.data() + 1, payload.data(), payload.size());
     }
 
-    ssize_t sent = 0;
+    // sendto returns int on Winsock and ssize_t on POSIX, and MSVC does not define ssize_t at all,
+    // so the result is widened to a type both agree on.
+    s64 sent = 0;
 
     {
         std::scoped_lock lock{send_mutex};
