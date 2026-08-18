@@ -927,6 +927,10 @@ struct Values {
                                          Category::Network};
     Setting<std::string> lan_play_virtual_ip{linkage, std::string(), "lan_play_virtual_ip",
                                              Category::Network};
+    // Whether local wireless (LDN) is carried over the relay using the ldn_mitm protocol. On for the
+    // games that have no LAN mode of their own, which is most of them; off leaves the relay to the
+    // plain IP traffic of games that do.
+    Setting<bool> lan_play_ldn_mitm{linkage, true, "lan_play_ldn_mitm", Category::Network};
 
     // WebService
     Setting<std::string> web_api_url{linkage, "api.ynet-fun.xyz", "web_api_url",

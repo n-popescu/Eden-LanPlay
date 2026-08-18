@@ -5,6 +5,7 @@
 
 #include <memory>
 
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/hle/kernel/k_event.h"
 #include "core/hle/service/cmif_serialization.h"
@@ -319,14 +320,27 @@ Result IUserLocalCommunicationService::Initialize(ClientProcessId aruid) {
 
     // LAN Play needs no host interface of its own: the console's address lives on the virtual
     // interface, so a host without a usable adapter is only fatal for the room backend.
-    if (auto stack = Network::LanPlay::GetStack()) {
-        lan_play_discovery = std::make_unique<LanPlay::Discovery>(std::move(stack));
+    //
+    // Carrying LDN over the relay is what makes a game with no LAN mode of its own work, so it is on
+    // by default. With it off the relay only carries the plain IP traffic of games that do have one,
+    // and local wireless falls back to the room backend below, exactly as if LAN Play were not
+    // selected. The choice is read here, when the game initialises LDN, so toggling it mid-game takes
+    // effect the next time the game enters its local multiplayer menu.
+    if (Settings::values.lan_play_ldn_mitm.GetValue()) {
+        if (auto stack = Network::LanPlay::GetStack()) {
+            lan_play_discovery = std::make_unique<LanPlay::Discovery>(std::move(stack));
 
-        R_TRY(lan_play_discovery->Initialize([this]() { OnEventFired(); }, true));
+            R_TRY(lan_play_discovery->Initialize([this]() { OnEventFired(); }, true));
 
-        is_initialized = true;
+            is_initialized = true;
 
-        R_SUCCEED();
+            R_SUCCEED();
+        }
+    } else if (Network::LanPlay::GetStack()) {
+        LOG_INFO(Service_LDN,
+                 "LAN Play is active but ldn_mitm over the relay is disabled; local wireless uses "
+                 "the room backend. Games that have no LAN mode of their own will not find sessions "
+                 "on the relay.");
     }
 
     const auto network_interface = Network::GetSelectedNetworkInterface();
