@@ -365,6 +365,7 @@ private slots:
     void OnMenuRecentFile();
     void OnConfigure();
     void OnConfigureTas();
+    void OnConfigureLanPlay();
     void OnDecreaseVolume();
     void OnIncreaseVolume();
     void OnMute();

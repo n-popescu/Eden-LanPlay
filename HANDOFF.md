@@ -328,7 +328,8 @@ g++ -std=c++20 -fsyntax-only -DFMT_HEADER_ONLY \
 
 ## 11. Settings quick reference
 
-*Emulation → Configure → Network → LAN Play*, stored in the Network category:
+*LAN Play → Configure LAN Play* in the menu bar, or the same panel under *Emulation → Configure →
+Network*. Stored in the Network category:
 
 | Setting | Meaning |
 | --- | --- |

@@ -4,14 +4,17 @@
 #pragma once
 
 #include <memory>
-#include <QFutureWatcher>
 #include <QWidget>
-
-#include "core/internal_network/lan_play/lan_play_connection_test.h"
 
 namespace Ui {
 class ConfigureNetwork;
 }
+
+namespace Core {
+class System;
+}
+
+class ConfigureLanPlay;
 
 class ConfigureNetwork : public QWidget {
     Q_OBJECT
@@ -27,16 +30,10 @@ private:
     void RetranslateUI();
     void SetConfiguration();
 
-    /// Greys out the relay fields when LAN Play is off.
-    void UpdateLanPlayEnabled(bool enabled);
-
-    /// Joins the relay on a worker thread and reports what answered. See RunConnectionTest.
-    void TestLanPlayConnection();
-
     std::unique_ptr<Ui::ConfigureNetwork> ui;
 
-    /// The test blocks for several seconds, so it runs off the UI thread.
-    QFutureWatcher<Network::LanPlay::ConnectionTestResult> lan_play_test_watcher;
+    /// The same widget the LAN Play dialog in the menu bar shows.
+    ConfigureLanPlay* lan_play_widget;
 
     const Core::System& system;
 };

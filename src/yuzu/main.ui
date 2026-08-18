@@ -227,6 +227,12 @@
     <addaction name="action_Capture_Screenshot"/>
     <addaction name="menuTAS"/>
    </widget>
+   <widget class="QMenu" name="menu_LAN_Play">
+    <property name="title">
+     <string>LAN &amp;Play</string>
+    </property>
+    <addaction name="action_Configure_LAN_Play"/>
+   </widget>
    <widget class="QMenu" name="menu_Help">
     <property name="title">
      <string>&amp;Help</string>
@@ -243,6 +249,7 @@
    <addaction name="menu_Emulation"/>
    <addaction name="menu_View"/>
    <addaction name="menu_Tools"/>
+   <addaction name="menu_LAN_Play"/>
    <addaction name="menu_Multiplayer"/>
    <addaction name="menu_Help"/>
   </widget>
@@ -453,6 +460,14 @@
   <action name="action_Launch_MiiEdit">
    <property name="text">
     <string>&amp;Mii Editor</string>
+   </property>
+  </action>
+  <action name="action_Configure_LAN_Play">
+   <property name="text">
+    <string>Configure LAN &amp;Play...</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
   <action name="action_Configure_Tas">
