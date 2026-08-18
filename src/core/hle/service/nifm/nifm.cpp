@@ -13,6 +13,7 @@
 #include "core/hle/service/nifm/nifm.h"
 #include "core/hle/service/server_manager.h"
 #include "core/internal_network/emu_net_state.h"
+#include "core/internal_network/lan_play/lan_play_stack.h"
 #include "core/internal_network/network.h"
 #include "core/internal_network/network_interface.h"
 #include "core/internal_network/wifi_scanner.h"
@@ -843,6 +844,27 @@ void IGeneralService::GetScanDataV3(HLERequestContext& ctx) {
     rb.Push(static_cast<u32>(scans.size()));
 }
 
+/**
+ * The LAN Play address, but only once the game is actually using the LAN Play network.
+ *
+ * A session that only ever plays online must see its host address here, exactly as it would with LAN
+ * Play switched off, so that merely selecting LAN Play changes nothing for online play. A game that
+ * entered its own LAN mode broadcasts on the network it was told it is on, and that first broadcast
+ * is what marks the network as in use.
+ */
+std::optional<Network::IPv4Address> GetLanPlayAddress() {
+    const auto stack = Network::LanPlay::GetStack();
+
+    if (!stack || !stack->IsGuestActive()) {
+        return std::nullopt;
+    }
+
+    const u32 address = stack->GetAddress();
+
+    return Network::IPv4Address{static_cast<u8>(address >> 24), static_cast<u8>(address >> 16),
+                                static_cast<u8>(address >> 8), static_cast<u8>(address)};
+}
+
 void IGeneralService::GetCurrentIpAddress(HLERequestContext& ctx) {
     LOG_WARNING(Service_NIFM, "(STUBBED) called");
 
@@ -856,6 +878,10 @@ void IGeneralService::GetCurrentIpAddress(HLERequestContext& ctx) {
         if (room_member->IsConnected()) {
             ipv4 = room_member->GetFakeIpAddress();
         }
+    }
+
+    if (const auto lan_play_address = GetLanPlayAddress()) {
+        ipv4 = lan_play_address;
     }
 
     IPC::ResponseBuilder rb{ctx, 3};
@@ -908,6 +934,16 @@ void IGeneralService::GetCurrentIpConfigInfo(HLERequestContext& ctx) {
         info.dns.is_automatic = true;
         info.dns.primary_dns = {1, 1, 1, 1};
         info.dns.secondary_dns = {8, 8, 8, 8};
+    }
+
+    if (const auto lan_play_address = GetLanPlayAddress()) {
+        constexpr u32 mask = Network::LanPlay::Relay::SubnetMask;
+
+        info.ip.is_automatic = true;
+        info.ip.ip_address = *lan_play_address;
+        info.ip.subnet_mask = {static_cast<u8>(mask >> 24), static_cast<u8>(mask >> 16),
+                               static_cast<u8>(mask >> 8), static_cast<u8>(mask)};
+        info.ip.default_gateway = {10, 13, 0, 1};
     }
 
     IPC::ResponseBuilder rb{ctx, 2 + (sizeof(IpConfigInfo) + 3) / sizeof(u32)};

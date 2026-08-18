@@ -5,7 +5,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <array>
+#include <chrono>
 #include <memory>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -18,6 +20,8 @@
 #include "core/hle/service/ipc_helpers.h"
 #include "core/hle/service/sockets/bsd.h"
 #include "core/hle/service/sockets/sockets_translate.h"
+#include "core/internal_network/lan_play/lan_play_socket.h"
+#include "core/internal_network/lan_play/lan_play_stack.h"
 #include "core/internal_network/network.h"
 #include "core/internal_network/socket_proxy.h"
 #include "core/internal_network/sockets.h"
@@ -519,8 +523,14 @@ std::pair<s32, Errno> BSD::SocketImpl(Domain domain, Type type, Protocol protoco
 
     LOG_INFO(Service, "New socket fd={}", fd);
 
-    auto room_member = Network::GetRoomMember().lock();
-    if (room_member && room_member->IsConnected()) {
+    auto lan_play_stack = Network::LanPlay::GetStack();
+    if (lan_play_stack &&
+        Network::LanPlay::Stack::Supports(Translate(domain), Translate(type), Translate(protocol))) {
+        // LAN Play carries this socket's 10.13.x.x traffic over the relay and keeps a host socket for
+        // everything else, so selecting LAN Play does not take the console off the internet.
+        descriptor.socket = std::make_shared<Network::LanPlay::LanPlaySocket>(lan_play_stack);
+    } else if (auto room_member = Network::GetRoomMember().lock();
+               room_member && room_member->IsConnected()) {
         descriptor.socket = std::make_shared<Network::ProxySocket>();
     } else {
         descriptor.socket = std::make_shared<Network::Socket>();
@@ -592,6 +602,72 @@ std::pair<s32, Errno> BSD::PollImpl(std::vector<u8>& write_buffer, std::span<con
         result.revents = Network::PollEvents{};
         return result;
     });
+
+    // A LAN Play socket has no host file descriptor, so it cannot be handed to the platform's poll;
+    // it is asked directly instead. Mixing both in one call would need the host poll to be woken by
+    // the virtual interface, so a call that contains any LAN Play socket is answered here.
+    const bool has_lan_play_socket =
+        std::any_of(host_pollfds.begin(), host_pollfds.end(), [](const Network::PollFD& pollfd) {
+            return dynamic_cast<Network::LanPlay::LanPlaySocket*>(pollfd.socket) != nullptr;
+        });
+
+    if (has_lan_play_socket) {
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::milliseconds{timeout < 0 ? 0 : timeout};
+
+        s32 ready = 0;
+
+        while (true) {
+            ready = 0;
+
+            for (std::size_t i = 0; i < fds.size(); ++i) {
+                auto* socket = host_pollfds[i].socket;
+                auto* lan_play_socket = dynamic_cast<Network::LanPlay::LanPlaySocket*>(socket);
+
+                Network::PollEvents revents{};
+
+                if (lan_play_socket != nullptr) {
+                    if (True(host_pollfds[i].events & Network::PollEvents::In) &&
+                        lan_play_socket->IsReadable()) {
+                        revents |= Network::PollEvents::In;
+                    }
+
+                    if (True(host_pollfds[i].events & Network::PollEvents::Out) &&
+                        lan_play_socket->IsWritable()) {
+                        revents |= Network::PollEvents::Out;
+                    }
+                } else {
+                    // Poll the host sockets of the same call without blocking, so a mixed set still
+                    // reports them.
+                    std::vector<Network::PollFD> single{host_pollfds[i]};
+
+                    if (Network::Poll(single, 0).first > 0) {
+                        revents = single[0].revents;
+                    }
+                }
+
+                fds[i].revents = Translate(revents);
+
+                if (revents != Network::PollEvents{}) {
+                    ready++;
+                }
+            }
+
+            if (ready > 0 || timeout == 0) {
+                break;
+            }
+
+            if (timeout > 0 && std::chrono::steady_clock::now() >= deadline) {
+                break;
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds{5});
+        }
+
+        std::memcpy(write_buffer.data(), fds.data(), nfds * sizeof(PollFD));
+
+        return {ready, Errno::SUCCESS};
+    }
 
     const auto result = Network::Poll(host_pollfds, timeout);
 

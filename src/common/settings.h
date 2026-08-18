@@ -920,6 +920,14 @@ struct Values {
                                            Category::Network};
     SwitchableSetting<bool> airplane_mode{linkage, false, "airplane_mode", Category::Network};
 
+    // LAN Play: joins a switch-lan-play relay directly, with no external client, no virtual adapter
+    // and no host routing changes. See docs/LanPlay.md.
+    SwitchableSetting<bool> lan_play_enabled{linkage, false, "lan_play_enabled", Category::Network};
+    Setting<std::string> lan_play_server{linkage, std::string(), "lan_play_server",
+                                         Category::Network};
+    Setting<std::string> lan_play_virtual_ip{linkage, std::string(), "lan_play_virtual_ip",
+                                             Category::Network};
+
     // WebService
     Setting<std::string> web_api_url{linkage, "api.ynet-fun.xyz", "web_api_url",
                                      Category::WebService};

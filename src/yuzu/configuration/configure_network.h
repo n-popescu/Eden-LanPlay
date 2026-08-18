@@ -24,6 +24,9 @@ private:
     void RetranslateUI();
     void SetConfiguration();
 
+    /// Greys out the relay fields when LAN Play is off.
+    void UpdateLanPlayEnabled(bool enabled);
+
     std::unique_ptr<Ui::ConfigureNetwork> ui;
 
     const Core::System& system;

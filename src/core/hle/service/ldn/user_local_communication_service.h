@@ -6,9 +6,12 @@
 
 #pragma once
 
+#include <memory>
+
 #include "core/hle/service/cmif_types.h"
 #include "core/hle/service/kernel_helpers.h"
 #include "core/hle/service/ldn/lan_discovery.h"
+#include "core/hle/service/ldn/lan_play/lan_play_discovery.h"
 #include "core/hle/service/ldn/ldn_types.h"
 #include "core/hle/service/service.h"
 
@@ -93,6 +96,9 @@ private:
     KernelHelpers::ServiceContext service_context;
     Kernel::KEvent* state_change_event;
     LANDiscovery lan_discovery;
+
+    /// Set instead of lan_discovery when the session joined a LAN Play relay.
+    std::unique_ptr<LanPlay::Discovery> lan_play_discovery;
 
     // Callback identifier for the OnLDNPacketReceived event.
     Network::RoomMember::CallbackHandle<Network::LDNPacket> ldn_packet_received;
