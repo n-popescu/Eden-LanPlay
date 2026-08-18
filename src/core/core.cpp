@@ -52,6 +52,7 @@
 #include "core/hle/service/services.h"
 #include "core/hle/service/set/system_settings_server.h"
 #include "core/hle/service/sm/sm.h"
+#include "core/internal_network/lan_play/lan_play_stack.h"
 #include "core/internal_network/network.h"
 #include "core/loader/loader.h"
 #include "core/memory.h"
@@ -139,6 +140,10 @@ struct System::Impl {
         kernel.SetMulticore(is_multicore);
         cpu_manager.SetMulticore(is_multicore);
         cpu_manager.SetAsyncGpu(is_async_gpu);
+
+        // Joins the LAN Play relay for this session if it is configured. Does nothing otherwise, and
+        // the front end re-applies this whenever the network settings change.
+        Network::LanPlay::ApplySettings();
     }
 
     void ReinitializeIfNecessary(System& system) {
@@ -418,6 +423,7 @@ struct System::Impl {
         kernel.Shutdown();
         stop_event = {};
         Network::RestartSocketOperations();
+        Network::LanPlay::Shutdown();
 
         if (auto room_member = Network::GetRoomMember().lock()) {
             Network::GameInfo game_info{};

@@ -8,10 +8,12 @@
 #include "core/core.h"
 #include "core/hle/kernel/k_event.h"
 #include "core/hle/service/cmif_serialization.h"
+#include "core/hle/service/ldn/lan_play/lan_play_discovery.h"
 #include "core/hle/service/ldn/ldn_results.h"
 #include "core/hle/service/ldn/ldn_types.h"
 #include "core/hle/service/ldn/user_local_communication_service.h"
 #include "core/hle/service/server_manager.h"
+#include "core/internal_network/lan_play/lan_play_stack.h"
 #include "core/internal_network/network.h"
 #include "core/internal_network/network_interface.h"
 #include "network/network.h"
@@ -20,6 +22,19 @@
 #undef CreateEvent
 
 namespace Service::LDN {
+
+/**
+ * The LDN backend is chosen when the game initialises LDN and does not change under it: LAN Play
+ * carries the ldn_mitm protocol over a switch-lan-play relay, the room backend carries Eden's own
+ * LDNPacket over a multiplayer room. Every service call goes to whichever one this session picked.
+ */
+#define LDN_DISPATCH(call)                                                                         \
+    do {                                                                                           \
+        if (lan_play_discovery) {                                                                  \
+            R_RETURN(lan_play_discovery->call);                                                     \
+        }                                                                                          \
+        R_RETURN(lan_discovery.call);                                                              \
+    } while (0)
 
 IUserLocalCommunicationService::IUserLocalCommunicationService(Core::System& system_)
     : ServiceFramework{system_, "IUserLocalCommunicationService"},
@@ -80,7 +95,7 @@ Result IUserLocalCommunicationService::GetState(Out<State> out_state) {
     *out_state = State::Error;
 
     if (is_initialized) {
-        *out_state = lan_discovery.GetState();
+        *out_state = lan_play_discovery ? lan_play_discovery->GetState() : lan_discovery.GetState();
     }
 
     LOG_INFO(Service_LDN, "called, state={}", *out_state);
@@ -92,12 +107,28 @@ Result IUserLocalCommunicationService::GetNetworkInfo(
     OutLargeData<NetworkInfo, BufferAttr_HipcPointer> out_network_info) {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.GetNetworkInfo(*out_network_info));
+    LDN_DISPATCH(GetNetworkInfo(*out_network_info));
 }
 
 Result IUserLocalCommunicationService::GetIpv4Address(Out<Ipv4Address> out_current_address,
                                                       Out<Ipv4Address> out_subnet_mask) {
     LOG_INFO(Service_LDN, "called");
+
+    // ldn is only asked this in the context of a local session, so LAN Play always answers with the
+    // virtual address here. nifm is the one that has to stay on the host address until the game
+    // actually uses the LAN Play network.
+    if (lan_play_discovery) {
+        const u32 address = lan_play_discovery->GetLocalAddress();
+        const u32 mask = Network::LanPlay::Relay::SubnetMask;
+
+        *out_current_address = {static_cast<u8>(address), static_cast<u8>(address >> 8),
+                                static_cast<u8>(address >> 16), static_cast<u8>(address >> 24)};
+        *out_subnet_mask = {static_cast<u8>(mask), static_cast<u8>(mask >> 8),
+                            static_cast<u8>(mask >> 16), static_cast<u8>(mask >> 24)};
+
+        R_SUCCEED();
+    }
+
     const auto network_interface = Network::GetSelectedNetworkInterface();
 
     R_UNLESS(network_interface.has_value(), ResultNoIpAddress);
@@ -121,7 +152,8 @@ Result IUserLocalCommunicationService::GetDisconnectReason(
     Out<DisconnectReason> out_disconnect_reason) {
     LOG_INFO(Service_LDN, "called");
 
-    *out_disconnect_reason = lan_discovery.GetDisconnectReason();
+    *out_disconnect_reason = lan_play_discovery ? lan_play_discovery->GetDisconnectReason()
+                                                : lan_discovery.GetDisconnectReason();
     R_SUCCEED();
 }
 
@@ -166,7 +198,7 @@ Result IUserLocalCommunicationService::GetNetworkInfoLatestUpdate(
 
     R_UNLESS(!out_node_latest_update.empty(), ResultBadInput);
 
-    R_RETURN(lan_discovery.GetNetworkInfo(*out_network_info, out_node_latest_update));
+    LDN_DISPATCH(GetNetworkInfo(*out_network_info, out_node_latest_update));
 }
 
 Result IUserLocalCommunicationService::Scan(
@@ -176,7 +208,7 @@ Result IUserLocalCommunicationService::Scan(
              channel, scan_filter.flag, scan_filter.network_type);
 
     R_UNLESS(!out_network_info.empty(), ResultBadInput);
-    R_RETURN(lan_discovery.Scan(out_network_info, *network_count, scan_filter));
+    LDN_DISPATCH(Scan(out_network_info, *network_count, scan_filter));
 }
 
 Result IUserLocalCommunicationService::ScanPrivate(
@@ -186,7 +218,7 @@ Result IUserLocalCommunicationService::ScanPrivate(
              channel, scan_filter.flag, scan_filter.network_type);
 
     R_UNLESS(out_network_info.empty(), ResultBadInput);
-    R_RETURN(lan_discovery.Scan(out_network_info, *network_count, scan_filter));
+    LDN_DISPATCH(Scan(out_network_info, *network_count, scan_filter));
 }
 
 Result IUserLocalCommunicationService::SetProtocol(u32 protocol) {
@@ -203,20 +235,20 @@ Result IUserLocalCommunicationService::SetWirelessControllerRestriction(
 Result IUserLocalCommunicationService::OpenAccessPoint() {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.OpenAccessPoint());
+    LDN_DISPATCH(OpenAccessPoint());
 }
 
 Result IUserLocalCommunicationService::CloseAccessPoint() {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.CloseAccessPoint());
+    LDN_DISPATCH(CloseAccessPoint());
 }
 
 Result IUserLocalCommunicationService::CreateNetwork(const CreateNetworkConfig& create_config) {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.CreateNetwork(create_config.security_config, create_config.user_config,
-                                         create_config.network_config));
+    LDN_DISPATCH(CreateNetwork(create_config.security_config, create_config.user_config,
+                               create_config.network_config));
 }
 
 Result IUserLocalCommunicationService::CreateNetworkPrivate(
@@ -224,21 +256,21 @@ Result IUserLocalCommunicationService::CreateNetworkPrivate(
     InArray<AddressEntry, BufferAttr_HipcPointer> address_list) {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.CreateNetwork(create_config.security_config, create_config.user_config,
-                                         create_config.network_config));
+    LDN_DISPATCH(CreateNetwork(create_config.security_config, create_config.user_config,
+                               create_config.network_config));
 }
 
 Result IUserLocalCommunicationService::DestroyNetwork() {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.DestroyNetwork());
+    LDN_DISPATCH(DestroyNetwork());
 }
 
 Result IUserLocalCommunicationService::SetAdvertiseData(
     InBuffer<BufferAttr_HipcAutoSelect> buffer_data) {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.SetAdvertiseData(buffer_data));
+    LDN_DISPATCH(SetAdvertiseData(buffer_data));
 }
 
 Result IUserLocalCommunicationService::SetStationAcceptPolicy(AcceptPolicy accept_policy) {
@@ -254,13 +286,13 @@ Result IUserLocalCommunicationService::AddAcceptFilterEntry(MacAddress mac_addre
 Result IUserLocalCommunicationService::OpenStation() {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.OpenStation());
+    LDN_DISPATCH(OpenStation());
 }
 
 Result IUserLocalCommunicationService::CloseStation() {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.CloseStation());
+    LDN_DISPATCH(CloseStation());
 }
 
 Result IUserLocalCommunicationService::Connect(
@@ -272,18 +304,30 @@ Result IUserLocalCommunicationService::Connect(
              connect_data.security_config.passphrase_size,
              connect_data.security_config.security_mode, connect_data.local_communication_version);
 
-    R_RETURN(lan_discovery.Connect(*network_info, connect_data.user_config,
-                                   static_cast<u16>(connect_data.local_communication_version)));
+    LDN_DISPATCH(Connect(*network_info, connect_data.user_config,
+                         static_cast<u16>(connect_data.local_communication_version)));
 }
 
 Result IUserLocalCommunicationService::Disconnect() {
     LOG_INFO(Service_LDN, "called");
 
-    R_RETURN(lan_discovery.Disconnect());
+    LDN_DISPATCH(Disconnect());
 }
 
 Result IUserLocalCommunicationService::Initialize(ClientProcessId aruid) {
     LOG_INFO(Service_LDN, "called, process_id={}", aruid.pid);
+
+    // LAN Play needs no host interface of its own: the console's address lives on the virtual
+    // interface, so a host without a usable adapter is only fatal for the room backend.
+    if (auto stack = Network::LanPlay::GetStack()) {
+        lan_play_discovery = std::make_unique<LanPlay::Discovery>(std::move(stack));
+
+        R_TRY(lan_play_discovery->Initialize([this]() { OnEventFired(); }, true));
+
+        is_initialized = true;
+
+        R_SUCCEED();
+    }
 
     const auto network_interface = Network::GetSelectedNetworkInterface();
     R_UNLESS(network_interface, ResultAirplaneModeEnabled);
@@ -303,11 +347,22 @@ Result IUserLocalCommunicationService::Initialize(ClientProcessId aruid) {
 
 Result IUserLocalCommunicationService::Finalize() {
     LOG_INFO(Service_LDN, "called");
+
+    is_initialized = false;
+
+    if (lan_play_discovery) {
+        const Result result = lan_play_discovery->Finalize();
+
+        // The stack itself belongs to the session, not to this service: the game may keep using the
+        // LAN Play network through its own sockets after LDN is torn down.
+        lan_play_discovery.reset();
+
+        R_RETURN(result);
+    }
+
     if (auto room_member = Network::GetRoomMember().lock()) {
         room_member->Unbind(ldn_packet_received);
     }
-
-    is_initialized = false;
 
     R_RETURN(lan_discovery.Finalize());
 }

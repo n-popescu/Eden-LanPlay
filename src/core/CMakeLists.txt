@@ -723,6 +723,10 @@ add_library(core STATIC
     hle/service/ldn/client_process_monitor.h
     hle/service/ldn/lan_discovery.cpp
     hle/service/ldn/lan_discovery.h
+    hle/service/ldn/lan_play/lan_play_discovery.cpp
+    hle/service/ldn/lan_play/lan_play_discovery.h
+    hle/service/ldn/lan_play/ldn_mitm_protocol.cpp
+    hle/service/ldn/lan_play/ldn_mitm_protocol.h
     hle/service/ldn/ldn.cpp
     hle/service/ldn/ldn.h
     hle/service/ldn/ldn_results.h
@@ -1127,6 +1131,30 @@ add_library(core STATIC
     hle/service/i2c/i2c.h
     internal_network/emu_net_state.cpp
     internal_network/emu_net_state.h
+    internal_network/lan_play/ipv4_packet.cpp
+    internal_network/lan_play/ipv4_packet.h
+    internal_network/lan_play/lan_play_client.cpp
+    internal_network/lan_play/lan_play_client.h
+    internal_network/lan_play/lan_play_config.cpp
+    internal_network/lan_play/lan_play_config.h
+    internal_network/lan_play/lan_play_diagnostics.cpp
+    internal_network/lan_play/lan_play_diagnostics.h
+    internal_network/lan_play/lan_play_network_interface.cpp
+    internal_network/lan_play/lan_play_network_interface.h
+    internal_network/lan_play/lan_play_protocol.cpp
+    internal_network/lan_play/lan_play_protocol.h
+    internal_network/lan_play/lan_play_socket.cpp
+    internal_network/lan_play/lan_play_socket.h
+    internal_network/lan_play/lan_play_stack.cpp
+    internal_network/lan_play/lan_play_stack.h
+    internal_network/lan_play/lan_play_tcp_connection.cpp
+    internal_network/lan_play/lan_play_tcp_connection.h
+    internal_network/lan_play/lan_play_tcp_listener.cpp
+    internal_network/lan_play/lan_play_tcp_listener.h
+    internal_network/lan_play/lan_play_udp_endpoint.cpp
+    internal_network/lan_play/lan_play_udp_endpoint.h
+    internal_network/lan_play/virtual_address_allocator.cpp
+    internal_network/lan_play/virtual_address_allocator.h
     internal_network/network.cpp
     internal_network/network.h
     internal_network/network_interface.cpp

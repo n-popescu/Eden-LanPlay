@@ -1,0 +1,407 @@
+name: Release
+
+# Builds and publishes Eden for Windows, Linux, macOS and Android, and attaches every artifact to a
+# GitHub release.
+#
+# It runs automatically when a v<major>.<minor>.<patch> tag is pushed, and can also be started by
+# hand from the Actions tab, in which case the tag is created from the commit the workflow was
+# started on.
+#
+# The Forgejo workflows under .forgejo/ stay as they are: they run the upstream project's translation
+# and licensing jobs on its own runners and never built releases here.
+#
+# Dependencies are taken from CPM (CPMUTIL_FORCE_BUNDLED) and, where possible, a bundled Qt, rather
+# than from the runner's package manager: Eden asks for Ubuntu 26.04 or newer, which no GitHub runner
+# image provides, and pinned bundled dependencies make a release reproducible from the tag alone.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, as major.minor.patch (for example 0.1.0). A v<version> tag is created if it does not exist yet.'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark the GitHub release as a pre-release'
+        required: false
+        default: true
+        type: boolean
+
+# Needed to create the release, its tag and its assets.
+permissions:
+  contents: write
+
+# One release at a time, and never cancelled halfway through: a partially uploaded release is worse
+# than a late one.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  # Bundled dependencies everywhere, so a build does not depend on the runner image's package set.
+  COMMON_CMAKE_FLAGS: >-
+    -DCPMUTIL_FORCE_BUNDLED=ON
+    -DENABLE_QT_TRANSLATION=ON
+    -DYUZU_TESTS=OFF
+    -DENABLE_WEB_SERVICE=OFF
+    -DENABLE_WERROR=OFF
+
+jobs:
+  info:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      short_hash: ${{ steps.resolve.outputs.short_hash }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the version, tag and commit being released
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = 'push' ]; then
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+          else
+            VERSION="$INPUT_VERSION"
+            TAG="v$VERSION"
+          fi
+
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$VERSION' is not a major.minor.patch version"
+            exit 1
+          fi
+
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "short_hash=$(git rev-parse --short "$GITHUB_SHA")"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Releasing $VERSION as $TAG from $(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_STEP_SUMMARY"
+
+  linux:
+    name: linux-${{ matrix.platform.arch }}
+    needs: info
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { arch: x86_64,  runner: ubuntu-latest }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+
+      - name: Install the build tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # Only the toolchain and the libraries CPM cannot provide (X11/Wayland/udev headers and
+          # the GL stack) come from apt; everything else is bundled.
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake libtool \
+            build-essential ccache cmake ninja-build nasm pkg-config \
+            glslang-tools spirv-tools \
+            libgl1-mesa-dev libglu1-mesa-dev mesa-common-dev \
+            libudev-dev libhidapi-dev libusb-1.0-0-dev \
+            libpulse-dev libasound2-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
+            libxkbcommon-dev libwayland-dev wayland-protocols \
+            libva-dev libvdpau-dev \
+            zlib1g-dev
+
+      - name: 'Cache: CPM sources and ccache'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/cpm
+            ~/.ccache
+          key: linux-${{ matrix.platform.arch }}-${{ hashFiles('cpmfile.json', 'CMakeLists.txt') }}
+          restore-keys: linux-${{ matrix.platform.arch }}-
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DYUZU_USE_BUNDLED_QT=ON \
+            ${{ env.COMMON_CMAKE_FLAGS }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Stage the install tree
+        run: |
+          set -euo pipefail
+          DESTDIR="$PWD/stage" cmake --install build
+          mkdir -p release_output
+          BASE="eden-${{ needs.info.outputs.version }}-linux-${{ matrix.platform.arch }}"
+          tar -C stage -czf "release_output/$BASE.tar.gz" .
+          tar -C stage -cJf "release_output/$BASE.tar.xz" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-${{ matrix.platform.arch }}
+          path: release_output
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: windows-x64
+    needs: info
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install the build tools
+        run: choco install ninja nasm --no-progress -y
+
+      - name: 'Cache: CPM sources'
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: windows-x64-${{ hashFiles('cpmfile.json', 'CMakeLists.txt') }}
+          restore-keys: windows-x64-
+
+      - name: Configure
+        shell: bash
+        run: |
+          set -euo pipefail
+          # MSVC already defaults to bundled Qt and bundled dependencies; passing them keeps this
+          # explicit and independent of that default changing.
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DYUZU_USE_BUNDLED_QT=ON \
+            ${{ env.COMMON_CMAKE_FLAGS }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Qt deployment step puts the DLLs next to the executable, so the build directory's
+          # bin/ is what a user needs.
+          mkdir -p release_output
+          BASE="eden-${{ needs.info.outputs.version }}-windows-x64"
+          7z a -tzip "release_output/$BASE.zip" ./build/bin/*
+          7z a -t7z  "release_output/$BASE.7z"  ./build/bin/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x64
+          path: release_output
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    name: macos-${{ matrix.platform.arch }}
+    needs: info
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # A real macOS runner per architecture, because the bundling and the ad-hoc signing use
+          # Apple's own tooling rather than LLVM stand-ins.
+          - { arch: arm64,  runner: macos-14 }
+          - { arch: x86_64, runner: macos-13 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+
+      - name: Install the build tools
+        run: |
+          set -euo pipefail
+          brew update
+          # Qt comes from Homebrew here: the bundled Qt build is not used on Apple platforms.
+          brew install autoconf automake cmake ninja nasm pkg-config \
+            glslang spirv-tools molten-vk vulkan-loader qt@6
+
+      - name: 'Cache: CPM sources and ccache'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/cpm
+            ~/Library/Caches/ccache
+          key: macos-${{ matrix.platform.arch }}-${{ hashFiles('cpmfile.json', 'CMakeLists.txt') }}
+          restore-keys: macos-${{ matrix.platform.arch }}-
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+            -DYUZU_USE_BUNDLED_QT=OFF \
+            ${{ env.COMMON_CMAKE_FLAGS }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Bundle and sign the .app
+        run: |
+          set -euo pipefail
+
+          APP=$(find build -maxdepth 3 -name 'eden.app' -type d | head -1)
+
+          if [ -z "$APP" ]; then
+            echo "::error::no eden.app was produced"
+            exit 1
+          fi
+
+          # macdeployqt copies the Qt frameworks in and rewrites the load paths; the ad-hoc signature
+          # afterwards is what lets Gatekeeper run an unnotarised build at all.
+          "$(brew --prefix qt@6)/bin/macdeployqt" "$APP" -verbose=1 || true
+          codesign --force --deep --sign - "$APP"
+
+          mkdir -p release_output
+          tar -C "$(dirname "$APP")" -czf \
+            "release_output/eden-${{ needs.info.outputs.version }}-macos-${{ matrix.platform.arch }}.app.tar.gz" \
+            "$(basename "$APP")"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-${{ matrix.platform.arch }}
+          path: release_output
+          if-no-files-found: error
+          retention-days: 7
+
+  android:
+    name: android
+    needs: info
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install the build tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ccache cmake ninja-build nasm glslang-tools spirv-tools autoconf automake libtool
+
+      - name: 'Cache: CPM sources and gradle'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/cpm
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-${{ hashFiles('cpmfile.json', 'src/android/**/*.gradle.kts') }}
+          restore-keys: android-
+
+      - name: Build the APK
+        # The repository's own script drives the gradle build and drops the APK and AAB into
+        # artifacts/. It is unsigned unless ANDROID_KEYSTORE_B64 is set, which is deliberate: a fork
+        # should not need secrets to produce a build.
+        run: |
+          set -euo pipefail
+          chmod +x .ci/android/build.sh src/android/gradlew
+          ./.ci/android/build.sh --target standard --build-type Release
+
+      - name: Collect the artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p release_output
+
+          find artifacts -name '*.apk' -exec sh -c \
+            'cp "$1" "release_output/eden-${{ needs.info.outputs.version }}-android-$(basename "$1")"' _ {} \;
+
+          if [ -z "$(ls -A release_output)" ]; then
+            echo "::error::the Android build produced no APK"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: release_output
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish the release
+    needs: [info, linux, windows, macos, android]
+    # A platform that fails should not block the rest: the release is created with whatever built,
+    # and a rerun of the failed job uploads the missing asset to the same release afterwards.
+    if: always() && needs.info.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download every build
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release_output
+
+      - name: List what is about to be published
+        run: ls -la release_output
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.info.outputs.tag }}
+          VERSION: ${{ needs.info.outputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$(ls -A release_output 2>/dev/null)" ]; then
+            echo "::error::no artifacts were produced, refusing to create an empty release"
+            exit 1
+          fi
+
+          # A manual run releases whatever commit it was started on, so the tag may not exist yet;
+          # gh creates it from --target in that case.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release_output/* --clobber
+          else
+            ARGS=(--title "$VERSION" --target "$GITHUB_SHA" --generate-notes)
+            if [ "${PRERELEASE:-false}" = 'true' ]; then
+              ARGS+=(--prerelease)
+            fi
+            gh release create "$TAG" "${ARGS[@]}" release_output/*
+          fi
+
+          gh release view "$TAG" >> "$GITHUB_STEP_SUMMARY"
