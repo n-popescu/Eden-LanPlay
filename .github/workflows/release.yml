@@ -253,94 +253,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  macos:
-    name: macos-${{ matrix.platform.arch }}
-    needs: info
-    runs-on: ${{ matrix.platform.runner }}
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          # A real macOS runner per architecture, because the bundling and the ad-hoc signing use
-          # Apple's own tooling rather than LLVM stand-ins.
-          #
-          # These labels have to name images that still exist. A label GitHub has retired does not
-          # fail the job, it leaves it queued as "waiting for a runner" until the 24 hour queue
-          # limit, and because the release job needs this one it takes the whole run down with it.
-          # macos-13 was the Intel image and has been retired; macos-15-intel replaces it, and
-          # macos-latest is the current Apple silicon image.
-          - { arch: arm64,  runner: macos-latest }
-          - { arch: x86_64, runner: macos-15-intel }
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          submodules: recursive
-
-      - name: Install the build tools
-        run: |
-          set -euo pipefail
-          brew update
-          # Qt comes from Homebrew here: the bundled Qt build is not used on Apple platforms.
-          brew install autoconf automake cmake ninja nasm pkg-config \
-            glslang spirv-tools molten-vk vulkan-loader qt@6
-
-      - name: 'Cache: CPM sources and ccache'
-        uses: actions/cache@v4
-        with:
-          path: |
-            .cache/cpm
-            ~/Library/Caches/ccache
-          key: macos-${{ matrix.platform.arch }}-${{ hashFiles('cpmfile.json', 'CMakeLists.txt') }}
-          restore-keys: macos-${{ matrix.platform.arch }}-
-
-      - name: Configure
-        run: |
-          set -euo pipefail
-          # YUZU_USE_BUNDLED_FFMPEG has to be asked for by name. It only defaults on for MSVC and
-          # Android, and CPMUTIL_FORCE_BUNDLED does not cover it, so without this CMakeLists.txt
-          # does a REQUIRED find_package(FFmpeg) against libraries no macOS runner has. The Linux
-          # job solves the same problem with apt; here the pinned macos-universal prebuilt is a
-          # better fit, because it is static and so needs nothing copied into the .app.
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
-            -DYUZU_USE_BUNDLED_QT=OFF \
-            -DYUZU_USE_BUNDLED_FFMPEG=ON \
-            ${{ env.COMMON_CMAKE_FLAGS }}
-
-      - name: Build
-        run: cmake --build build
-
-      - name: Bundle and sign the .app
-        run: |
-          set -euo pipefail
-
-          APP=$(find build -maxdepth 3 -name 'eden.app' -type d | head -1)
-
-          if [ -z "$APP" ]; then
-            echo "::error::no eden.app was produced"
-            exit 1
-          fi
-
-          # macdeployqt copies the Qt frameworks in and rewrites the load paths; the ad-hoc signature
-          # afterwards is what lets Gatekeeper run an unnotarised build at all.
-          "$(brew --prefix qt@6)/bin/macdeployqt" "$APP" -verbose=1 || true
-          codesign --force --deep --sign - "$APP"
-
-          mkdir -p release_output
-          tar -C "$(dirname "$APP")" -czf \
-            "release_output/eden-${{ needs.info.outputs.version }}-macos-${{ matrix.platform.arch }}.app.tar.gz" \
-            "$(basename "$APP")"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-macos-${{ matrix.platform.arch }}
-          path: release_output
-          if-no-files-found: error
-          retention-days: 7
-
   android:
     name: android
     needs: info
@@ -407,7 +319,7 @@ jobs:
 
   release:
     name: Publish the release
-    needs: [info, linux, windows, macos, android]
+    needs: [info, linux, windows, android]
     # A platform that fails should not block the rest: the release is created with whatever built,
     # and a rerun of the failed job uploads the missing asset to the same release afterwards.
     if: always() && needs.info.result == 'success'
