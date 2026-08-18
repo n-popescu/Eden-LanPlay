@@ -608,7 +608,7 @@ std::pair<s32, Errno> BSD::PollImpl(std::vector<u8>& write_buffer, std::span<con
     // the virtual interface, so a call that contains any LAN Play socket is answered here.
     const bool has_lan_play_socket =
         std::any_of(host_pollfds.begin(), host_pollfds.end(), [](const Network::PollFD& pollfd) {
-            return dynamic_cast<Network::LanPlay::LanPlaySocket*>(pollfd.socket) != nullptr;
+            return pollfd.socket->AsLanPlaySocket() != nullptr;
         });
 
     if (has_lan_play_socket) {
@@ -622,7 +622,7 @@ std::pair<s32, Errno> BSD::PollImpl(std::vector<u8>& write_buffer, std::span<con
 
             for (std::size_t i = 0; i < fds.size(); ++i) {
                 auto* socket = host_pollfds[i].socket;
-                auto* lan_play_socket = dynamic_cast<Network::LanPlay::LanPlaySocket*>(socket);
+                auto* lan_play_socket = socket->AsLanPlaySocket();
 
                 Network::PollEvents revents{};
 

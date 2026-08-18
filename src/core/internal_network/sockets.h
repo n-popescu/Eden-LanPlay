@@ -20,6 +20,10 @@ namespace Network {
 
 struct ProxyPacket;
 
+namespace LanPlay {
+class LanPlaySocket;
+}
+
 class SocketBase {
 public:
 #ifndef _WIN32
@@ -90,6 +94,13 @@ public:
     virtual bool IsOpened() const = 0;
 
     virtual void HandleProxyPacket(const ProxyPacket& packet) = 0;
+
+    /// This socket as a LAN Play socket, or nullptr when it belongs to the host stack. poll has to
+    /// tell the two apart because a LAN Play socket has no host file descriptor, and the build has
+    /// no RTTI, so this stands in for a dynamic_cast.
+    [[nodiscard]] virtual LanPlay::LanPlaySocket* AsLanPlaySocket() {
+        return nullptr;
+    }
 
     [[nodiscard]] SOCKET GetFD() const {
         return fd;

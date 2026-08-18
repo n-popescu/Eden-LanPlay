@@ -852,7 +852,7 @@ void IGeneralService::GetScanDataV3(HLERequestContext& ctx) {
  * entered its own LAN mode broadcasts on the network it was told it is on, and that first broadcast
  * is what marks the network as in use.
  */
-std::optional<Network::IPv4Address> GetLanPlayAddress() {
+static std::optional<Network::IPv4Address> GetLanPlayAddress() {
     const auto stack = Network::LanPlay::GetStack();
 
     if (!stack || !stack->IsGuestActive()) {

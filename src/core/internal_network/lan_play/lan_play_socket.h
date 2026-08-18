@@ -83,6 +83,10 @@ public:
 
     void HandleProxyPacket(const ProxyPacket& packet) override;
 
+    LanPlaySocket* AsLanPlaySocket() override {
+        return this;
+    }
+
     /// True when a guest poll or select should report this socket as readable.
     [[nodiscard]] bool IsReadable();
 

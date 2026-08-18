@@ -108,8 +108,14 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          # Only the toolchain and the libraries CPM cannot provide (X11/Wayland/udev headers and
-          # the GL stack) come from apt; everything else is bundled.
+          # Only the toolchain and the libraries CPM cannot provide come from apt; everything else is
+          # bundled. Two groups here are not optional even though the comment above says "bundled":
+          #
+          #  - FFmpeg. CPMUTIL_FORCE_BUNDLED does not cover it, because YUZU_USE_BUNDLED_FFMPEG only
+          #    defaults on for MSVC and Android, so on Linux CMakeLists.txt does a REQUIRED
+          #    find_package(FFmpeg) against the system libraries.
+          #  - The X11 extension headers bundled SDL3 checks for. Missing XSCRNSAVER, Xfixes or Xtst
+          #    fails configure outright rather than disabling a feature.
           sudo apt-get install -y --no-install-recommends \
             autoconf automake libtool \
             build-essential ccache cmake ninja-build nasm pkg-config \
@@ -118,7 +124,10 @@ jobs:
             libudev-dev libhidapi-dev libusb-1.0-0-dev \
             libpulse-dev libasound2-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
+            libxfixes-dev libxss-dev libxtst-dev \
             libxkbcommon-dev libwayland-dev wayland-protocols \
+            libdrm-dev libgbm-dev libdbus-1-dev \
+            libavcodec-dev libavfilter-dev libavutil-dev libswscale-dev \
             libva-dev libvdpau-dev \
             zlib1g-dev
 
@@ -229,8 +238,14 @@ jobs:
         platform:
           # A real macOS runner per architecture, because the bundling and the ad-hoc signing use
           # Apple's own tooling rather than LLVM stand-ins.
-          - { arch: arm64,  runner: macos-14 }
-          - { arch: x86_64, runner: macos-13 }
+          #
+          # These labels have to name images that still exist. A label GitHub has retired does not
+          # fail the job, it leaves it queued as "waiting for a runner" until the 24 hour queue
+          # limit, and because the release job needs this one it takes the whole run down with it.
+          # macos-13 was the Intel image and has been retired; macos-15-intel replaces it, and
+          # macos-latest is the current Apple silicon image.
+          - { arch: arm64,  runner: macos-latest }
+          - { arch: x86_64, runner: macos-15-intel }
     steps:
       - uses: actions/checkout@v4
         with:
