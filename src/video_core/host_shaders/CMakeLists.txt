@@ -92,8 +92,11 @@ if (HAIKUOS)
     # glslangValidator WILL crash, glslang will not
     set(GLSLANGVALIDATOR "glslang")
 else()
-    # Normal sane platform who doesn't have a CRASHING glslangValidator
-    find_program(GLSLANGVALIDATOR "glslangValidator")
+    # Upstream renamed the binary to `glslang`; most distributions still ship a `glslangValidator`
+    # symlink for it, but the official Windows release archive only carries the new name. Both names
+    # are the same tool, and glslangValidator stays first so the Haiku note above keeps its meaning
+    # everywhere else.
+    find_program(GLSLANGVALIDATOR NAMES glslangValidator glslang)
 endif()
 
 if ("${GLSLANGVALIDATOR}" STREQUAL "GLSLANGVALIDATOR-NOTFOUND")
