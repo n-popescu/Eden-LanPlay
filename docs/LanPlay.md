@@ -219,11 +219,35 @@ socket:
 * **Relay Server** — `host:port`, for example `switch.example.com:11451`. The port defaults to 11451
   when omitted. If the relay requires a login, use `user:password@host:port`.
 * **Virtual IP** — leave empty for an automatic address, or force one inside `10.13.0.0/16`.
+* **Use ldn_mitm for games without LAN Play support** — on by default. See below.
 
-Stored in the Network category as `lan_play_enabled`, `lan_play_server` and `lan_play_virtual_ip`.
+Stored in the Network category as `lan_play_enabled`, `lan_play_server`, `lan_play_virtual_ip` and
+`lan_play_ldn_mitm`.
 
 The settings can be changed while a game is running: saving them joins or leaves the relay
 immediately, and re-saving unchanged settings does nothing.
+
+### ldn_mitm over the relay
+
+A LAN Play relay carries two quite different kinds of traffic, and this setting decides whether the
+first one is carried at all:
+
+* **Local wireless (LDN).** Most games only have local wireless multiplayer and no LAN mode, so on a
+  real console they need the ldn_mitm homebrew to turn local wireless into ordinary IP traffic that a
+  relay can route. This is that path, implemented in `Discovery` and `ldn_mitm_protocol.cpp` and byte
+  compatible with a real Switch running ldn_mitm, which is what lets consoles and Ryujinx-based
+  emulators join the same session. **This checkbox controls it.**
+* **A game's own LAN mode.** A handful of games speak plain IP on the local network. That traffic goes
+  through `LanPlaySocket` and the virtual interface and is *not* affected by this checkbox.
+
+So leaving it on is what most people want: without it, a game with no LAN mode of its own will never
+find a session on the relay. Turning it off narrows LAN Play to the games that have a real LAN mode,
+and local wireless falls back to Eden's room backend exactly as if LAN Play were not selected — useful
+if a game misbehaves when the emulator answers LDN scans over the relay.
+
+The choice is read when the game initialises LDN, so like the backend choice itself it does not
+migrate under a running session: toggling it mid-game takes effect the next time the game enters its
+local multiplayer menu.
 
 ## 12. Debugging a session
 

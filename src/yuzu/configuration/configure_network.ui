@@ -95,6 +95,16 @@
           </property>
          </widget>
         </item>
+        <item row="3" column="0" colspan="2">
+         <widget class="QCheckBox" name="lan_play_ldn_mitm">
+          <property name="text">
+           <string>Use ldn_mitm for games without LAN Play support</string>
+          </property>
+          <property name="toolTip">
+           <string>Carries local wireless (LDN) over the relay using the ldn_mitm protocol, which is what makes games that have no LAN mode of their own work over LAN Play. It is byte compatible with a real Switch running ldn_mitm, so consoles and other emulators on the same relay can join. Turn it off to leave the relay to the plain IP traffic of games that do have a LAN mode. Takes effect the next time a game enters its local multiplayer menu.</string>
+          </property>
+         </widget>
+        </item>
        </layout>
       </widget>
      </item>

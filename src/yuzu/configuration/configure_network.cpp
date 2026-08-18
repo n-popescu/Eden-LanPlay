@@ -32,6 +32,7 @@ void ConfigureNetwork::ApplyConfiguration() {
     Settings::values.lan_play_enabled = ui->lan_play_enabled->isChecked();
     Settings::values.lan_play_server = ui->lan_play_server->text().trimmed().toStdString();
     Settings::values.lan_play_virtual_ip = ui->lan_play_virtual_ip->text().trimmed().toStdString();
+    Settings::values.lan_play_ldn_mitm = ui->lan_play_ldn_mitm->isChecked();
 
     // The multiplayer mode can be changed while a game is running: this joins or leaves the relay
     // immediately, and re-saving unchanged settings does nothing.
@@ -65,6 +66,7 @@ void ConfigureNetwork::SetConfiguration() {
         QString::fromStdString(Settings::values.lan_play_server.GetValue()));
     ui->lan_play_virtual_ip->setText(
         QString::fromStdString(Settings::values.lan_play_virtual_ip.GetValue()));
+    ui->lan_play_ldn_mitm->setChecked(Settings::values.lan_play_ldn_mitm.GetValue());
 
     UpdateLanPlayEnabled(ui->lan_play_enabled->isChecked());
 }
@@ -74,4 +76,5 @@ void ConfigureNetwork::UpdateLanPlayEnabled(bool enabled) {
     ui->lan_play_server_label->setEnabled(enabled);
     ui->lan_play_virtual_ip->setEnabled(enabled);
     ui->lan_play_virtual_ip_label->setEnabled(enabled);
+    ui->lan_play_ldn_mitm->setEnabled(enabled);
 }
